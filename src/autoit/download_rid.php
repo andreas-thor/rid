@@ -1,5 +1,6 @@
 <?php 
 
+// Download started June 30 2017
 
 $handle = fopen("rid_gender.txt", "r");
 if ($handle) {
