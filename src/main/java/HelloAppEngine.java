@@ -10,28 +10,28 @@ import javax.servlet.http.HttpServletResponse;
 
 public class HelloAppEngine extends HttpServlet {
 
-  public void doGet(HttpServletRequest request, HttpServletResponse response) 
-      throws IOException {
-      
-    response.setContentType("text/html");
-//    response.getWriter().print("Hello App Engine!\r\n");
-    
-     
-    URL url = new URL("http://www.researcherid.com/rid/" + request.getParameter("id"));
+	private static final long serialVersionUID = 1L;
 
-    URLConnection urlConnection = url.openConnection();
-    urlConnection.setConnectTimeout(60000); 
-    urlConnection.setReadTimeout(60000);
-    
-    BufferedReader reader = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
-    StringBuffer json = new StringBuffer();
-    String line;
+	public void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException {
 
-    while ((line = reader.readLine()) != null) {
-      json.append(line);
-    }
-    reader.close();    
+		response.setContentType("text/html");
+		// response.getWriter().print("Hello App Engine!\r\n");
 
-    response.getWriter().print(json.toString());
-  }
+		URL url = new URL("http://www.researcherid.com/rid/" + request.getParameter("id"));
+
+		URLConnection urlConnection = url.openConnection();
+		urlConnection.setConnectTimeout(60000);
+		urlConnection.setReadTimeout(60000);
+
+		BufferedReader reader = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
+		StringBuffer json = new StringBuffer();
+		String line;
+
+		while ((line = reader.readLine()) != null) {
+			json.append(line);
+		}
+		reader.close();
+
+		response.getWriter().print(json.toString());
+	}
 }
