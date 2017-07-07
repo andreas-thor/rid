@@ -12,7 +12,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.Map;
 import java.util.stream.Stream;
 import java.util.zip.ZipFile;
 
@@ -55,6 +54,24 @@ public class AuthorFromTopicListParser {
 	   	
 		super();
         
+		
+        /* parse RID details */
+		ZipFile zipRID = new ZipFile(dir + "rid.zip", Charset.forName("UTF-8"));
+		zipRID
+        	.stream()
+        	.filter (entry -> !entry.isDirectory())
+        	.filter (entry -> entry.getName().endsWith(".html"))
+        	.forEach(entry -> {
+        		try { 
+        			parseRIDDetail (zipRID.getInputStream(entry));
+        		} catch (Exception e) {
+					System.out.println("Exception for " + entry.getName());
+					System.out.println(e.toString());
+				}});  
+		zipRID.close();
+		
+
+		
 		/* parse all RIDs from topic search*/
 		ZipFile zipAuthor = new ZipFile(dir + "authors_by_topic.zip", Charset.forName("UTF-8"));
         zipAuthor
@@ -74,20 +91,7 @@ public class AuthorFromTopicListParser {
         zipAuthor.close();		
 
         
-        /* parse RID details */
-		ZipFile zipRID = new ZipFile(dir + "rid.zip", Charset.forName("UTF-8"));
-		zipRID
-        	.stream()
-        	.filter (entry -> !entry.isDirectory())
-        	.filter (entry -> entry.getName().endsWith(".html"))
-        	.forEach(entry -> {
-        		try { 
-        			parseRIDDetail (zipRID.getInputStream(entry));
-        		} catch (Exception e) {
-					System.out.println("Exception for " + entry.getName());
-					System.out.println(e.toString());
-				}});  
-		zipRID.close();
+
 		
 		
 		addGender();
@@ -95,20 +99,20 @@ public class AuthorFromTopicListParser {
 		
 		/* write topic search to CSV */
 		// Filename is ".csv.import" so that is has to be imported explicitly into Excel because UTF-8 must be set (standard is ISO)
-		CSVWriter csv1 = new CSVWriter (new OutputStreamWriter(new FileOutputStream(dir + "topic2authors.csv.import"), "UTF-8"));
-		csv1.writeNext(new String[]{"Topic", "Pos", "ResearcherID"});
-		mapTopic2RID.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(topicEntry -> { 
-			topicEntry.getValue().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(row -> {
-				csv1.writeNext(new String[]{topicEntry.getKey(), String.valueOf(row.getKey()), row.getValue()});
-			});
-		});
-		csv1.close();
+//		CSVWriter csv1 = new CSVWriter (new OutputStreamWriter(new FileOutputStream(dir + "topic2authors.csv.import"), "UTF-8"));
+//		csv1.writeNext(new String[]{"Topic", "Pos", "ResearcherID"});
+//		mapTopic2RID.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(topicEntry -> { 
+//			topicEntry.getValue().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(row -> {
+//				csv1.writeNext(new String[]{topicEntry.getKey(), String.valueOf(row.getKey()), row.getValue()});
+//			});
+//		});
+//		csv1.close();
 		
 		
 		
 		
 		/* generate authors csv */
-		String[] attr = Stream.concat(Arrays.stream(new String[]{"Name", "ResearcherID"}), allAttributeNames.stream().sorted()).distinct().toArray(String[]::new);
+		String[] attr = Stream.concat(Arrays.stream(new String[]{"ResearcherID", "Name Detail", "Name List", "Gender"}), allAttributeNames.stream().sorted()).distinct().toArray(String[]::new);
 		CSVWriter csv2 = new CSVWriter (new OutputStreamWriter(new FileOutputStream(dir + "authors.csv.import"), "UTF-8"));
 		csv2.writeNext(attr); 
 		mapRID2Authors.forEach((id, map) -> {
@@ -156,14 +160,16 @@ public class AuthorFromTopicListParser {
 			if (col[0].matches("^\\d+.*")) {
 				
 				HashMap<String, String> result = new HashMap<String, String>();
-				result.put("Name", col[1].trim());
+				result.put("Name List", col[1].trim());
 				result.put("Institution(s)", col[2].trim());
 				result.put("Country/Territory", col[3].trim());
 				result.put("ResearcherID", col[4].trim());
 				result.put("Keywords", col[5].trim());
 				result.put("Other Names", col[6].trim());
 				
-				addAuthor(result, true);
+				addAuthor(result, false);	// false = we do not include new authors here; true = we do include
+//				addAuthor(result, col[4].trim().equals("A-9872-2008") || col[4].trim().equals("G-9978-2015"));
+				
 				mapTopic2RID.get(topic).put(Integer.valueOf(col[0].substring(0, col[0].indexOf('.'))), col[4].trim());
 			}
 		}
@@ -180,7 +186,7 @@ public class AuthorFromTopicListParser {
 		if (name==null) throw new Exception("div.profileName not found");
 		
 		
-		authorAttributes.put("Name", name.text().trim());
+		authorAttributes.put("Name Detail", name.text().trim());
 		
 		for (String h: new String[]{ "table.profileTable tr", "table.profileTableInst tr", "table.profileTableDesc tr"}) {
 			Elements rows = doc.select(h);
@@ -206,7 +212,8 @@ public class AuthorFromTopicListParser {
 			}
 		}
 		
-		addAuthor(authorAttributes, false);	// we do not include new authors here
+		addAuthor(authorAttributes, true);	// false = we do not include new authors here; true = we do include
+		
 	}
 	
 	
@@ -257,28 +264,34 @@ public class AuthorFromTopicListParser {
 		
 		mapRID2Authors.forEach((id, attributes) -> {
 			found[1]++;
-			String name = attributes.get("Name");
-			if ((name != null) && (name.length()>0)) {
-				String split[] = name.toUpperCase().trim().split(" ");
-				String checkName = split[split.length-1];
-				int pos = split.length-1;
-				do {
-					// check --> break
-					String gender = mapFirstName2Gender.get(checkName);
-					if (gender != null) {
-						mapRID2Authors.get(id).put("Gender", gender);
-						found[0]++;
-						break;
-					}
+//			String name = attributes.get("Name");
+			for (String name: new String[]{attributes.get("Name List"), attributes.get("Name Detail")}) {
+			
+				if ((name != null) && (name.length()>0)) {
+					String split[] = Arrays.stream(name.toUpperCase().trim().split(" ")).map(s -> s.trim()).filter(s -> s.length()>1).filter(s -> '.' != s.charAt(s.length()-1)).toArray(String[]::new);
 					
-					pos--;
-					if (pos<0) break;
-					checkName = split[pos] + " " + checkName;
-				} while (true);
-				
 					
-				
-				
+					if (split.length==0) continue;	// next in "for (String:name)" loop
+					String checkName = split[split.length-1];
+					int pos = split.length-1;
+					do {
+						// check --> break
+						String gender = mapFirstName2Gender.get(checkName);
+						if (gender != null) {
+							mapRID2Authors.get(id).put("Gender", gender);
+							found[0]++;
+							return;		// next in "mapRID2Authors.forEach" loop
+						}
+						
+						pos--;
+						if (pos<0) break;	
+						checkName = split[pos] + " " + checkName;
+					} while (true);
+					
+						
+					
+					
+				}
 			}
 			
 		});
